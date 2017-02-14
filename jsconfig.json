@@ -4,6 +4,6 @@
     },
     "include": [
         "src/**/*.js",
-        "frameworks/cocos2d/**/*.js"
+        "frameworks/cocos2d-html5/**/*.js"
     ]
 }
