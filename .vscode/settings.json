@@ -1,0 +1,7 @@
+// Placez vos paramètres dans ce fichier pour remplacer les paramètres par défaut et les paramètres utilisateur.
+{
+    "tslint.enable": true,
+    "tslint.jsEnable": true,
+    "javascript.format.enable": true,
+    "javascript.validate.enable": true
+}
