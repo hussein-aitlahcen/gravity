@@ -1,15 +1,15 @@
-if (!String.format) {
-    String.format = function (format) {
-        var args = Array.prototype.slice.call(arguments, 1);
-        return format.replace(/{(\d+)}/g, function (match, number) {
-            return typeof args[number] != 'undefined' ?
-                args[number] :
-                match;
-        });
-    };
-}
+var Resources = {
+    ui: {
+        button: {
+            blue: "res/ui/button0.png",
+            green: "res/ui/button1.png",
+            red: "res/ui/button2.png",
+            yellow: "res/ui/button3.png"
+        }
+    },
+    sound: {
 
-var res = {
+    },
     assets: {
         background: {
             black: "res/assets/background/black.png",
@@ -48,9 +48,5 @@ var res = {
     }
 };
 
-var g_resources = [
-    res.assets.background.black,
-    res.assets.background.blue,
-    res.assets.background.dark_purple,
-    res.assets.background.purple
+var GlobalResources = [
 ];
