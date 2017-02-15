@@ -3,7 +3,7 @@ var express = require("express");
 var app = express();
 var server = require("http").createServer(app);
 var io = require("socket.io")(server);
-var common = require("../common/message");
+var common = require("../common/crossref");
 
 server.listen(8000, function () {
     console.log("Server listening.");

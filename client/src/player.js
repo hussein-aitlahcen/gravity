@@ -3,9 +3,8 @@ var PlayerConstants = {
     COLOR_ENNEMY: "red"
 }
 
-var ACCOUNT_LOCAL = null;
-
-var Player = function (info) {
-    this.local = info.id === ACCOUNT_LOCAL.id;
+var Player = function (info, local) {
     this.info = info;
+    // local player ?
+    this.local = local;
 };

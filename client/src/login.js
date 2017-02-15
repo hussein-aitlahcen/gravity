@@ -28,6 +28,7 @@ var LoginLayer = NetLayer.extend({
         btnLogin.addTouchEventListener(function (sender, type) {
             switch (type) {
                 case ccui.Widget.TOUCH_ENDED:
+                    cc.log("logging in as " + txtUserName.getString());
                     that.sendMessage(new IdentificationRequest(txtUserName.getString(), txtPassword.getString()));
                     break;
             }
@@ -36,6 +37,12 @@ var LoginLayer = NetLayer.extend({
         return true;
     },
     onIncommingMessage: function (message) {
+        if (message.id == MessageId.SMSG_IDENTIFICATION_RES) {
+            if (message.code == IdentificationResultEnum.SUCCESS) {
+                cc.log("login successfully, switching to game scene");
+                cc.director.runScene(new GameScene());
+            }
+        }
     },
     onOutgoingMessage: function (message) {
     }

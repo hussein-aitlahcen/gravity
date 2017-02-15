@@ -12,7 +12,7 @@
         "extensions"
     ],
     "jsList": [
-        "message.js",
+        "crossref.js",
         "src/resource.js",
         "src/background.js",
         "src/ui.js",

@@ -5,7 +5,7 @@
     },
     "include": [
         "src/**/*",
-        "../common/**/*",
+        "../common/crossref.js",
         "frameworks/cocos2d-html5/**/*"
     ]
 }
