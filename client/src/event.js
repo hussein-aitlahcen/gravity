@@ -1,4 +1,5 @@
-var EVENT_GAME = "game.event";
+var GRAVITY_EVENT = "game.event";
+
 var GameEventType = {
     START: "game.event.start",
     STOP: "game.event.stop"
@@ -15,9 +16,11 @@ var NetworkEventType = {
 
 var GravityEvent = {
     fire: function (type, data) {
-        var event = new cc.EventCustom(EVENT_GAME);
-        event.setUserData({ type: type, data: data });
+        var event = new cc.EventCustom(GRAVITY_EVENT);
+        event.setUserData({
+            type: type,
+            data: data
+        });
         cc.eventManager.dispatchEvent(event);
     }
 };
-

@@ -1,7 +1,7 @@
 var socket = io();
 var socketGravityListener = cc.EventListener.create({
     event: cc.EventListener.CUSTOM,
-    eventName: EVENT_GAME,
+    eventName: GRAVITY_EVENT,
     callback: function (event) {
         var gravityEvent = event.getUserData();
         switch (gravityEvent.type) {

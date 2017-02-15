@@ -1,43 +1,88 @@
-var MessageId = {
-    CMSG_IDENTIFICATION_REQ: 0,
-    SMSG_IDENTIFICATION_RES: 1
-};
+var NetMsg = {
+    Enum: {
+        IdentificationResultEnum: {
+            SUCCESS: 0,
+            WRONG_CREDENTIALS: 1,
+            BANNED: 2,
+            ALREADY_CONNECTED: 3
+        }
+    },
+    Client: {
+        IdentificationRequest: {
+            ID: 0,
+            create: function (username, password) {
+                return {
+                    id: NetMsg.Client.IdentificationRequest.ID,
+                    username: username,
+                    password: password
+                }
+            }
+        },
+        MovementRequest: {
+            ID: 1,
+            create: function (vec) {
+                return {
+                    id: NetMsg.Client.MovementRequest.ID,
+                    vector: vec
+                }
+            }
+        }
+    },
+    Server: {
+        IdentificationResult: {
+            ID: 100,
+            create: function (code, info) {
+                return {
+                    id: NetMsg.Server.IdentificationResult.ID,
+                    code: code,
+                    info: info
+                }
+            }
+        },
+        PlayerSpawn: {
+            ID: 101,
+            create: function (infos) {
+                return {
+                    id: NetMsg.Server.PlayerSpawn.ID,
+                    infos: infos
+                }
+            }
+        },
+        GameStart: {
+            ID: 102,
+            create: function () {
+                return {
+                    id: NetMsg.Server.GameStart.ID
+                }
+            }
+        },
+        PlayerUpdate: {
+            ID: 103,
+            create: function (playerId, movement, speed) {
+                return {
+                    id: NetMsg.Server.PlayerUpdate.ID,
+                    playerId: playerId,
+                    movement: movement,
+                    speed: speed
+                }
+            }
+        }
+    }
+}
 
-var IdentificationResultEnum = {
-    SUCCESS: 0,
-    WRONG_CREDENTIALS: 1,
-    BANNED: 2,
-    ALREADY_CONNECTED: 3
-};
+var NetType = {
+    PlayerInfo: function (id, team, level, shipType) {
+        this.id = id;
+        this.team = team;
+        this.level = level;
+        this.shipType = shipType;
+    },
+    AccountInfo: function (id, experience, level) {
+        this.id = id;
+        this.experience = experience;
+        this.level = level;
+    }
+}
 
-var IdentificationRequest = function (username, password) {
-    this.id = MessageId.CMSG_IDENTIFICATION_REQ;
-    this.username = username;
-    this.password = password;
-};
-
-var IdentificationResult = function (code, info) {
-    this.id = MessageId.SMSG_IDENTIFICATION_RES;
-    this.code = code;
-    this.info = info;
-};
-
-var PlayerInfo = function (id, team, level, shipType) {
-    this.id = id;
-    this.team = team;
-    this.level = level;
-    this.shipType = shipType;
-};
-
-var AccountInfo = function (id, experience, level) {
-    this.id = id;
-    this.experience = experience;
-    this.level = level;
-};
-
-exports.PlayerInfo = PlayerInfo;
-exports.AccountInfo = AccountInfo;
-exports.MessageId = MessageId;
-exports.IdentificationResultEnum = IdentificationResultEnum;
-exports.IdentificationRequest = IdentificationRequest;
-exports.IdentificationResult = IdentificationResult;
+exports.NetType = NetType;
+exports.NetMsg = NetMsg;

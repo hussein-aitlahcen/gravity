@@ -15,11 +15,9 @@
         "crossref.js",
         "src/resource.js",
         "src/background.js",
-        "src/ui.js",
         "src/event.js",
         "src/network.js",
         "src/player.js",
-        "src/ship.js",
         "src/netlayer.js",
         "src/login.js",
         "src/game.js"

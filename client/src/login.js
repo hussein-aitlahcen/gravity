@@ -29,7 +29,7 @@ var LoginLayer = NetLayer.extend({
             switch (type) {
                 case ccui.Widget.TOUCH_ENDED:
                     cc.log("logging in as " + txtUserName.getString());
-                    that.sendMessage(new IdentificationRequest(txtUserName.getString(), txtPassword.getString()));
+                    that.sendMessage(NetMsg.Client.IdentificationRequest.create(txtUserName.getString(), txtPassword.getString()));
                     break;
             }
         }, this);
@@ -37,15 +37,14 @@ var LoginLayer = NetLayer.extend({
         return true;
     },
     onIncommingMessage: function (message) {
-        if (message.id == MessageId.SMSG_IDENTIFICATION_RES) {
-            if (message.code == IdentificationResultEnum.SUCCESS) {
+        if (message.id == NetMsg.Server.IdentificationResult.ID) {
+            if (message.code == NetMsg.Enum.IdentificationResultEnum.SUCCESS) {
                 cc.log("login successfully, switching to game scene");
-                cc.director.runScene(new GameScene());
+                cc.director.runScene(new GameScene(message.info));
             }
         }
     },
-    onOutgoingMessage: function (message) {
-    }
+    onOutgoingMessage: function (message) {}
 });
 
 var LoginScene = cc.Scene.extend({

@@ -5,7 +5,7 @@ var NetLayer = cc.Layer.extend({
         var that = this;
         cc.eventManager.addListener(cc.EventListener.create({
             event: cc.EventListener.CUSTOM,
-            eventName: EVENT_GAME,
+            eventName: GRAVITY_EVENT,
             callback: function (event) {
                 var gravityEvent = event.getUserData();
                 var gameCanvas = gravityEvent.data;
