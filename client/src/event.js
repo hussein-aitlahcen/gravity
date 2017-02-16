@@ -1,4 +1,4 @@
-var GRAVITY_EVENT = "game.event";
+var GRAVITY_EVENT = "gravity.event";
 
 var GameEventType = {
     START: "game.event.start",

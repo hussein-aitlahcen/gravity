@@ -28,6 +28,8 @@
     //      2 - Forced to use WebGL renderer, but this will be ignored on mobile browsers
  }
  */
+
+exports = {};
 cc.game.onStart = function () {
     if (!cc.sys.isNative && document.getElementById("cocosLoading"))
         document.body.removeChild(document.getElementById("cocosLoading"));

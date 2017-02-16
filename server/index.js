@@ -10,4 +10,4 @@ server.listen(8000, function () {
 app.use(express.static("../client"));
 app.use(express.static("../common"));
 
-game.Game.start();
+new game.Game().start();

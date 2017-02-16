@@ -16,6 +16,9 @@ var NetLayer = cc.Layer.extend({
                     case NetworkEventType.OUTGOING_MESSAGE:
                         that.onOutgoingMessage(gravityEvent.data);
                         break;
+                    case NetworkEventType.DISCONNECTED:
+                        that.onDisconnected(gravityEvent.data);
+                        break;
                 }
             }
         }), 1);
