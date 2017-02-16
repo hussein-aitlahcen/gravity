@@ -59,10 +59,9 @@ class IdentificationRequest extends AbstractNetworkMessage {
 exports.IdentificationRequest = IdentificationRequest;
 
 class MovementRequest extends AbstractNetworkMessage {
-    constructor(x, y) {
+    constructor(direction) {
         super(MessageId.CS_MOVEMENT_REQ);
-        this.x = x;
-        this.y = y;
+        this.direction = direction;
     }
 }
 exports.MovementRequest = MovementRequest;
@@ -133,20 +132,20 @@ class Vec2 extends AbstractCoordinate {
         super(x, y);
     }
 
-    translate(x, y) {
-        return new Vec2(this.x + x, this.y + y);
-    }
-
     mul(factor) {
         return new Vec2(this.x * factor, this.y * factor);
     }
 
     add(vec) {
-        return translate(vec.x, vec.y);
+        return new Vec2(this.x + vec.x, this.y + vec.y);
     }
 
     normalized() {
-        var factor = 1.0 / this.length();
+        let length = this.length();
+        if (length === 0)
+            return this;
+        let factor = 1.0 / length;
+        console.log("fact: " + factor + " len: " + length);
         return this.mul(factor);
     }
 
@@ -159,6 +158,10 @@ exports.Vec2 = Vec2;
 class Point extends AbstractCoordinate {
     constructor(x, y) {
         super(x, y);
+    }
+
+    vectorToPoint(p) {
+        return new Vec2(p.x - this.x, p.y - this.y);
     }
 }
 exports.Point = Point;
@@ -194,7 +197,7 @@ exports.AbstractEntityInfo = AbstractEntityInfo;
 class ShipInfo extends AbstractEntityInfo {
     constructor(id, team, position, velocity, shipType) {
         super(EntityTypeId.SHIP, id, team, position, velocity);
-        this.shipType;
+        this.shipType = shipType;
     }
 }
 exports.ShipInfo = ShipInfo;
@@ -245,7 +248,7 @@ class AbstractEntity {
     }
 
     getPosition() {
-        return info.position;
+        return new Point(this.info.position.x, this.info.position.y);
     }
 
     setPosition(newPosition) {
@@ -253,7 +256,7 @@ class AbstractEntity {
     }
 
     getVelocity() {
-        return this.info.velocity;
+        return new Vec2(this.info.velocity.x, this.info.velocity.y);
     }
 
     setVelocity(newVelocity) {

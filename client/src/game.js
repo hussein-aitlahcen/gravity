@@ -13,10 +13,7 @@ var GameLayer = NetLayer.extend({
         return true;
     },
     update: function (dt) {
-        for (var i = 0; i < this.players.length; i++) {
-            let currentPlayer = this.players[i];
-            this.players[i].update(dt);
-        }
+        this.entities.forEach(entity => entity.update(dt));
     },
     getPlayer: function (playerId) {
         return this.players.find(player => player.info.id === playerId);
@@ -29,14 +26,26 @@ var GameLayer = NetLayer.extend({
     },
     addEntity: function (entity) {
         this.entities.push(entity);
+        if (entity.sprite) {
+            this.addChild(entity.sprite);
+        } else {
+            cc.log("entity withouth sprite");
+        }
     },
     removeEntity: function (entityId) {
-        this.entities = this.entities.filter(entity => entity.info.id !== entityId);
+        let entity = this.getEntity(entityId);
+        if (entity) {
+            this.entities = this.entities.filter(entity => entity.info.id !== entityId);
+            if (entity.sprite) {
+                this.removeChild(entity.sprite);
+            }
+        }
     },
     getEntity: function (entityId) {
-        return this.entity.find(entity => entity.info.id === entityId);
+        return this.entities.find(entity => entity.info.id === entityId);
     },
     onIncommingMessage: function (message) {
+        cc.log("message received");
         switch (message.id) {
             case MessageId.SC_PLAYER_JOIN:
                 cc.log("player join");
@@ -72,6 +81,15 @@ var GameLayer = NetLayer.extend({
 
             case MessageId.SC_ENTITY_SYNC:
                 cc.log("entity sync");
+                let entity = this.getEntity(message.entityId);
+                let currentPosition = entity.getPosition();
+                let distanceError = currentPosition.vectorToPoint(message.position).length();
+                const epsilon = 30;
+                if (distanceError > epsilon) {
+                    entity.setPosition(message.position);
+                    cc.log("movement correction");
+                }
+                entity.setVelocity(message.velocity);
                 break;
 
             case MessageId.SC_ENTITY_DESTROY:
@@ -88,22 +106,22 @@ var GameLayer = NetLayer.extend({
     isLocalShip: function (ship) {
         return ship.info.id === this.account.id;
     },
-    initLocalPlayer: function (ship) {
+    initLocalShip: function (ship) {
         this.movementListener = {
             event: cc.EventListener.KEYBOARD,
             onKeyPressed: function (keyCode, event) {
                 switch (keyCode) {
                     case cc.KEY.up:
-                        ship.setMovementLocalY(1);
+                        ship.setVelocityLocalY(1);
                         break;
                     case cc.KEY.down:
-                        ship.setMovementLocalY(-1);
+                        ship.setVelocityLocalY(-1);
                         break;
                     case cc.KEY.left:
-                        ship.setMovementLocalX(-1);
+                        ship.setVelocityLocalX(-1);
                         break;
                     case cc.KEY.right:
-                        ship.setMovementLocalX(1);
+                        ship.setVelocityLocalX(1);
                         break;
                 }
             },
@@ -111,11 +129,11 @@ var GameLayer = NetLayer.extend({
                 switch (keyCode) {
                     case cc.KEY.up:
                     case cc.KEY.down:
-                        ship.setMovementLocalY(0);
+                        ship.setVelocityLocalY(0);
                         break;
                     case cc.KEY.left:
                     case cc.KEY.right:
-                        ship.setMovementLocalX(0);
+                        ship.setVelocityLocalX(0);
                         break;
                 }
             }

@@ -50,51 +50,105 @@ class GameHandler {
         this.handlers[id] = callback;
     }
 
-    handle(socket, message) {
+    handle(player, message) {
         if (this.handlers.hasOwnProperty(message.id)) {
-            this.handlers[message.id].call(this, socket, message);
+            this.handlers[message.id].call(this, player, message);
         } else {
             console.log("unhandled message");
             console.log(message);
         }
     }
 
-    handleIdentification(socket, message) {
+    handleIdentification(player, message) {
         let account = this.game.accountManager.getAccount(message.username);
         if (account !== undefined && account.password == message.password) {
             if (!account.connected) {
                 // switch state to connected
                 account.connected = true;
                 this.game.accountManager.saveAccount(account);
-                socket.account = account;
-                socket.emit("message", new common.IdentificationResult(common.IdentificationResultEnum.SUCCESS, account.toNetwork()));
-                this.game.playerJoin(socket);
+                player.setAccount(account);
+                player.send(new common.IdentificationResult(common.IdentificationResultEnum.SUCCESS, account.toNetwork()));
+                this.game.playerJoin(player);
             } else {
                 // player is already connected
-                socket.emit("message", new common.IdentificationResult(common.IdentificationResultEnum.ALREADY_CONNECTED));
+                player.send(new common.IdentificationResult(common.IdentificationResultEnum.ALREADY_CONNECTED));
             }
         } else {
             // wrong credentials
-            socket.emit("message", new common.IdentificationResult(common.IdentificationResultEnum.WRONG_CREDENTIALS));
+            player.send(new common.IdentificationResult(common.IdentificationResultEnum.WRONG_CREDENTIALS));
         }
     }
 
-    handleMovementRequest(socket, message) {
-
+    handleMovementRequest(player, message) {
+        let ship = player.getShip();
+        let vec = new common.Vec2(message.direction.x, message.direction.y);
+        let newVelocity = vec.normalized().mul(ship.getSpeed());
+        console.log(newVelocity);
+        ship.setVelocity(newVelocity);
+        this.game.broadcast(
+            new common.EntitySync(
+                ship.getId(),
+                ship.getPosition(),
+                newVelocity,
+                new common.Vec2(0, 0)
+            )
+        );
     }
 }
 
 class Player {
-    constructor(socket, team) {
+    constructor(socket) {
         this.socket = socket;
-        this.team = team;
+        this.ship = null;
+        this.account = null;
+        this.team = null;
+    }
+
+    getTeam() {
+        return this.team;
+    }
+
+    setTeam(teamId) {
+        this.team = teamId;
+    }
+
+    getAccount() {
+        return this.account;
+    }
+
+    setAccount(account) {
+        this.account = account;
+    }
+
+    getId() {
+        return this.account.id;
+    }
+
+    getShip() {
+        return this.ship;
+    }
+
+    setShip(ship) {
+        this.ship = ship;
+    }
+
+    getUsername() {
+        return this.account.username;
+    }
+
+    getLevel() {
+        return this.account.level;
+    }
+
+    send(message) {
+        this.socket.emit("message", message);
     }
 
     toNetwork() {
         return new common.PlayerInfo(
-            this.socket.account.id,
-            this.socket.account.username,
-            this.socket.account.level
+            this.getId(),
+            this.getUsername(),
+            this.getLevel()
         );
     }
 }
@@ -102,10 +156,23 @@ class Player {
 class Ship extends common.AbstractEntity {
     constructor(info) {
         super(info)
+        this.speed = 200;
+    }
+
+    getSpeed() {
+        return this.speed;
+    }
+
+    setSpeed(speed) {
+        this.speed = speed;
     }
 
     update(dt) {
         super.update(dt);
+    }
+
+    toNetwork() {
+        return this.info;
     }
 }
 
@@ -125,12 +192,6 @@ class Team {
 class Game {
     constructor() {
         this.state = common.GameStateId.INITALIZING;
-        this.teams = [
-            new Team(0),
-            new Team(1)
-        ];
-        this.syncAccumulator = 0;
-        this.syncInterval = 2;
         this.core = createGame();
         this.handler = new GameHandler(this);
         this.accountManager = new AccountManager();
@@ -145,16 +206,17 @@ class Game {
         var accountManager = this.accountManager;
         io.on("connection", function (socket) {
             console.log("Client connected.");
+            let player = new Player(socket);
             socket.on("message", function (message) {
                 console.log("Client message: ");
                 console.log(message);
-                handler.handle(socket, message);
+                handler.handle(player, message);
             });
             socket.on("disconnect", function () {
                 console.log("Client disconnected.");
-                if (socket.account !== undefined) {
-                    socket.account.connected = false;
-                    accountManager.saveAccount(socket.account);
+                if (player.getAccount() !== undefined) {
+                    player.getAccount().connected = false;
+                    accountManager.saveAccount(player.getAccount());
                 }
             });
         });
@@ -163,6 +225,20 @@ class Game {
     goToGameState(newState) {
         this.state = newState;
         this.broadcast(new common.GameStateUpdate(newState));
+    }
+
+    addEntity(entity) {
+        this.entities.push(entity);
+        this.broadcast(
+            new common.EntitySpawn(
+                entity.getType(),
+                entity.toNetwork()
+            )
+        );
+    }
+
+    getEntity(entityId) {
+        this.entities.find(entity => entity.getId() === entityId);
     }
 
     broadcast(message) {
@@ -182,12 +258,10 @@ class Game {
         return nextTeam;
     }
 
-    playerJoin(socket) {
+    playerJoin(player) {
         let nextTeam = this.getNextTeam();
-        let player = new Player(socket, nextTeam);
-        socket.player = player;
+        player.setTeam(nextTeam);
         nextTeam.addPlayer(player);
-
         this.broadcast(new common.PlayerJoin(player.toNetwork()));
     }
 
@@ -202,6 +276,9 @@ class Game {
             case common.GameStateId.WAITING_READY:
                 this.onWaitingPlayersReady(dt);
                 break;
+            case common.GameStateId.PLAYING:
+                this.onPlaying(dt);
+                break;
             case common.GameStateId.DONE:
                 this.onDone(dt);
                 break;
@@ -214,9 +291,10 @@ class Game {
             new Team(0),
             new Team(1)
         ];
+        this.entities = [];
         this.syncAccumulator = 0;
         this.syncInterval = 2;
-        this.gotoGameState(common.GameStateId.WAITING_PLAYERS);
+        this.goToGameState(common.GameStateId.WAITING_PLAYERS);
     }
 
     onWaitingPlayers(dt) {
@@ -233,18 +311,26 @@ class Game {
             console.log("game spawning ships for team: " + i);
             var currentTeam = this.teams[i];
             currentTeam.players.forEach(player => {
-                player.ship = new Ship(new common.ShipInfo(player.info.id, i, new common.Point(250, 100), new common.Vec2(0, 0), i));
-                this.broadcast(new common.EntitySpawn(common.EntityTypeId.SHIP, player.ship.info));
+                player.setShip(new Ship(
+                    new common.ShipInfo(
+                        player.getId(),
+                        i,
+                        new common.Point(250, 100),
+                        new common.Vec2(0, 0),
+                        i
+                    )
+                ));
+                this.addEntity(player.getShip());
             }, this);
         }
     }
 
     onWaitingPlayersReady(dt) {
-
+        this.goToGameState(common.GameStateId.PLAYING);
     }
 
     onPlaying(dt) {
-
+        this.entities.forEach(entity => entity.update(dt));
     }
 
     onDone(dt) {

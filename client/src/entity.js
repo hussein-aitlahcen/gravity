@@ -9,6 +9,7 @@ class Ship extends AbstractEntity {
         let shipColor = info.team == 0 ? ShipColor.COLOR_TEAM_ONE : ShipColor.COLOR_TEAM_ZERO;
         this.sprite = new cc.Sprite(Resources.assets.game.ship["type_" + this.info.shipType][shipColor]);
         this.sprite.setAnchorPoint(new cc.Point(0.5, 0.5));
+        this.localVelocity = new Vec2(0, 0);
     }
 
     update(dt) {
@@ -17,9 +18,12 @@ class Ship extends AbstractEntity {
     }
 
     setVelocityLocal(vec) {
-        let velocity = this.getVelocity();
+        cc.log("controller velocity changed");
+        cc.log(vec);
+        let velocity = this.localVelocity;
         if (vec.x != velocity.x || vec.y != velocity.y) {
-            GravityEvent.fire(NetworkEventType.OUTGOING_MESSAGE, new MovementRequest(vec.x, vec.y));
+            this.localVelocity = vec;
+            GravityEvent.fire(NetworkEventType.OUTGOING_MESSAGE, new MovementRequest(vec));
         }
         this.setVelocity(vec);
     }
