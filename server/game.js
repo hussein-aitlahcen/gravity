@@ -216,7 +216,7 @@ class Game {
         ];
         this.syncAccumulator = 0;
         this.syncInterval = 2;
-        this.state = common.GameStateId.WAITING_PLAYERS;
+        this.gotoGameState(common.GameStateId.WAITING_PLAYERS);
     }
 
     onWaitingPlayers(dt) {
