@@ -52,6 +52,7 @@ class GameHandler {
         this.addHandler(common.MessageId.CS_IDENTIFICATION_REQ, this.handleIdentification);
         this.addHandler(common.MessageId.CS_MOVEMENT_REQ, this.handleMovementRequest);
         this.addHandler(common.MessageId.CS_SHOOT_REQ, this.handleShootRequest);
+        this.addHandler(common.MessageId.CS_ROTATION_REQ, this.handleRotationRequest);
     }
 
     addHandler(id, callback) {
@@ -92,19 +93,18 @@ class GameHandler {
         let direction = new common.Vec2(message.direction.x, message.direction.y);
         let newVelocity = direction.normalized().mul(ship.getSpeed());
         ship.setVelocity(newVelocity);
-        this.game.broadcast(
-            new common.EntitySync(
-                ship.getId(),
-                ship.getPosition(),
-                newVelocity,
-                ship.getRotation()
-            )
-        );
+        this.game.broadcastSync(ship);
     }
 
     handleShootRequest(player, message) {
         let ship = player.getShip();
         ship.setShooting(message.value);
+    }
+
+    handleRotationRequest(player, message) {
+        let ship = player.getShip();
+        ship.setRotation(message.angle);
+        this.game.broadcastSync(ship);
     }
 }
 
@@ -314,6 +314,17 @@ class Game {
         io.sockets.emit("message", message);
     }
 
+    broadcastSync(entity) {
+        this.broadcast(
+            new common.EntitySync(
+                entity.getId(),
+                entity.getPosition(),
+                entity.getVelocity(),
+                entity.getRotation()
+            )
+        );
+    }
+
     getNextProjectileId() {
         return this.nextProjectileId--;
     }
@@ -445,14 +456,18 @@ class Game {
                     // projectile creation while shooting
                     if (entity.canShoot()) {
                         entity.resetShootAccumulator();
-                        let projVelocity = new common.Vec2(0, entity.getProjectileSpeed());
+                        let angle = entity.getRotation();
+                        let position = entity.getPosition();
+                        let radAngle = angle * Math.PI / 180;
+                        let projectileDirection = new common.Vec2(Math.cos(radAngle), Math.sin(radAngle));
+                        let projectileVelocity = projectileDirection.mul(entity.getProjectileSpeed());
                         let projectile = new Projectile(
                             new common.ProjectileInfo(
                                 this.getNextProjectileId(),
                                 entity.getTeam(),
                                 entity.getPosition(),
-                                projVelocity,
-                                0,
+                                projectileVelocity,
+                                entity.getRotation(),
                                 1
                             )
                         );

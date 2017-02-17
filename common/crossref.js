@@ -13,6 +13,7 @@ const MessageId = {
     CS_IDENTIFICATION_REQ: 0,
     CS_MOVEMENT_REQ: 1,
     CS_SHOOT_REQ: 2,
+    CS_ROTATION_REQ: 3,
 
     SC_IDENTIFICATION_RES: 100,
     SC_PLAYER_JOIN: 101,
@@ -57,7 +58,6 @@ class IdentificationRequest extends AbstractNetworkMessage {
         this.password = password;
     }
 }
-exports.IdentificationRequest = IdentificationRequest;
 
 class MovementRequest extends AbstractNetworkMessage {
     constructor(direction) {
@@ -65,12 +65,18 @@ class MovementRequest extends AbstractNetworkMessage {
         this.direction = direction;
     }
 }
-exports.MovementRequest = MovementRequest;
 
 class ShootRequest extends AbstractNetworkMessage {
     constructor(value) {
         super(MessageId.CS_SHOOT_REQ);
         this.value = value;
+    }
+}
+
+class RotationRequest extends AbstractNetworkMessage {
+    constructor(angle) {
+        super(MessageId.CS_ROTATION_REQ);
+        this.angle = angle;
     }
 }
 
@@ -165,6 +171,10 @@ exports.Vec2 = Vec2;
 class Point extends AbstractCoordinate {
     constructor(x, y) {
         super(x, y);
+    }
+
+    angleToPoint(p) {
+        return Math.atan2(p.y - this.y, p.x - this.x) * 180 / Math.PI;
     }
 
     vectorToPoint(p) {

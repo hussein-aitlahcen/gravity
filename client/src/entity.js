@@ -18,12 +18,21 @@ class AbstractSpriteEntity extends AbstractEntity {
         this.image = image;
         this.sprite = new cc.Sprite(image);
         this.sprite.setAnchorPoint(new cc.Point(0.5, 0.5));
-        this.sprite.setPosition(info.position);
+
+        this.setPosition(info.position);
+        this.setRotation(info.rotation);
     }
 
     setPosition(position) {
-        this.sprite.position = position;
         super.setPosition(position);
+        this.sprite.setPosition(position);
+    }
+
+    setRotation(angle) {
+        super.setRotation(angle);
+        let normalAngle = 90;
+        let spriteAngle = normalAngle - angle;
+        this.sprite.setRotation(spriteAngle);
     }
 
     update(dt) {
@@ -57,6 +66,13 @@ class Ship extends AbstractSpriteEntity {
         super(info, Ship.SpriteResource(info.shipType, info.team));
         this.currentDirection = new Vec2(0, 0);
         this.shooting = false;
+    }
+
+    setLookingDirection(target) {
+        let angle = this.getPosition().angleToPoint(target);
+        // update local
+        super.setRotation(angle);
+        GravityEvent.fire(NetworkEventType.OUTGOING_MESSAGE, new RotationRequest(angle));
     }
 
     setDirection(newDirection) {

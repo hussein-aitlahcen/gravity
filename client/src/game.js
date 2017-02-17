@@ -91,12 +91,15 @@ var GameLayer = NetLayer.extend({
                 let distanceError = currentPosition.vectorToPoint(newPosition).length();
                 const epsilon = 20;
                 if (distanceError > epsilon) {
-                    cc.log("movement correction");
+                    // TODO: correct interpolation, smoother than teleport...
                     let segment = 1;
                     let interpolation = currentPosition.interpolate(newPosition, segment);
                     entity.setPosition(interpolation);
                 }
                 entity.setVelocity(newVelocity);
+                if (!this.isLocalId(message.entityId)) {
+                    entity.setRotation(message.rotation);
+                }
                 break;
 
             case MessageId.SC_ENTITY_DESTROY:
@@ -111,8 +114,8 @@ var GameLayer = NetLayer.extend({
     onDisconnected: function (data) {
 
     },
-    isLocalShip: function (ship) {
-        return ship.info.id === this.account.id;
+    isLocalId: function (entityId) {
+        return entityId === this.account.id;
     },
     initLocalShip: function (ship) {
         this.mouseListener = {
@@ -132,7 +135,11 @@ var GameLayer = NetLayer.extend({
                 }
             },
             onMouseScroll: function (event) { },
-            onMouseMove: function (event) { }
+            onMouseMove: function (event) {
+                let x = event.getLocationX();
+                let y = event.getLocationY();
+                ship.setLookingDirection(new Point(x, y));
+            }
         }
         this.keyboardListener = {
             event: cc.EventListener.KEYBOARD,
