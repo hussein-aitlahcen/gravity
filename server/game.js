@@ -31,8 +31,8 @@ class Account {
 class AccountManager {
     constructor() {
         this.accounts = [
-            new Account(0, "smarken", "test", false, false, 0, 1, 0),
-            new Account(1, "test", "test", false, false, 0, 1, 1)
+            new Account(0, "smarken", "test", false, false, 0, 1, common.ShipTypeId.BATTLE_CRUISER),
+            new Account(1, "test", "test", false, false, 0, 1, common.ShipTypeId.FRIGATE)
         ];
     }
 
@@ -170,8 +170,41 @@ class Player {
 }
 
 class AbstractNetworkEntity extends common.AbstractEntity {
-    constructor(info) {
+    constructor(info, width, height) {
         super(info);
+        this.width = width;
+        this.height = height;
+    }
+
+    getWidth() {
+        return this.width;
+    }
+
+    getHeight() {
+        return this.height;
+    }
+
+    getBounds() {
+        let pos = this.getPosition();
+        let w = this.getWidth();
+        let h = this.getHeight();
+        let hw = w / 2;
+        let hh = h / 2;
+        return {
+            minx: pos.x - hw,
+            miny: pos.y - hh,
+            maxx: pos.x + hw,
+            maxy: pos.y + hh
+        };
+    }
+
+    collideWith(entity) {
+        let localBounds = this.getBounds();
+        let remoteBounds = entity.getBounds();
+        return !(remoteBounds.minx > localBounds.maxx ||
+            remoteBounds.maxx < localBounds.minx ||
+            remoteBounds.maxy > localBounds.miny ||
+            remoteBounds.miny < localBounds.maxy);
     }
 
     toNetwork() {
@@ -180,11 +213,13 @@ class AbstractNetworkEntity extends common.AbstractEntity {
 }
 
 class Ship extends AbstractNetworkEntity {
-    constructor(info) {
-        super(info)
-        this.speed = 200;
-        this.shootSpeed = 0.2;
-        this.projectileSpeed = 350;
+    constructor(info, hasGun, speed, shootSpeed, powerFactor, projectileSpeed, width, height) {
+        super(info, width, height);
+        this.hasGun = hasGun;
+        this.speed = speed;
+        this.shootSpeed = shootSpeed;
+        this.powerFactor = powerFactor;
+        this.projectileSpeed = projectileSpeed;
         this.shooting = false;
         this.lastShootAccumulator = 0;
     }
@@ -205,12 +240,20 @@ class Ship extends AbstractNetworkEntity {
         this.speed = speed;
     }
 
+    getPowerFactor() {
+        return this.powerFactor;
+    }
+
+    setPowerFactor(power) {
+        this.powerFactor = power;
+    }
+
     setShooting(value) {
         this.shooting = value;
     }
 
     canShoot() {
-        return this.shooting && this.lastShootAccumulator <= 0;
+        return this.hasGun && this.shooting && this.lastShootAccumulator <= 0;
     }
 
     resetShootAccumulator() {
@@ -231,9 +274,69 @@ class Ship extends AbstractNetworkEntity {
     }
 }
 
-class Projectile extends AbstractNetworkEntity {
+class Hunter extends Ship {
     constructor(info) {
-        super(info);
+        super(info, true, 400, 0.6, 0, 500, 99, 75);
+    }
+}
+
+class Frigate extends Ship {
+    constructor(info) {
+        super(info, true, 320, 0.4, 1, 450, 112, 75);
+    }
+}
+
+class BattleCruiser extends Ship {
+    constructor(info) {
+        super(info, true, 250, 0.3, 2, 400, 98, 75);
+    }
+}
+
+class UFO extends Ship {
+    constructor(info) {
+        super(info, false, 450, 0, 0, 0, 91, 91);
+    }
+}
+
+class Projectile extends AbstractNetworkEntity {
+    constructor(info, width, height) {
+        super(info, width, height);
+    }
+}
+
+class ThickLaser extends Projectile {
+    constructor(id, team, position, velocity, rotation, power) {
+        super(
+            new common.ProjectileInfo(
+                id,
+                team,
+                position,
+                velocity,
+                rotation,
+                power,
+                1
+            ),
+            13,
+            37
+        );
+    }
+}
+
+class ThinLaser extends Projectile {
+    constructor(id, team, position, velocity, rotation, power) {
+        super(
+            new common.ProjectileInfo(
+                id,
+                team,
+                position,
+                velocity,
+                rotation,
+                power,
+                0
+            ),
+            9,
+            37
+        );
     }
 }
 
@@ -246,8 +349,23 @@ class Team {
     addPlayer(player) {
         this.players.push(player);
     }
+
+    broadcast(message) {
+        this.players.forEach(player => player.send(message));
+    }
 }
 
+class ShipFactory {
+    static Create(info) {
+        switch (info.shipType) {
+            case common.ShipTypeId.HUNTER: return new Hunter(info);
+            case common.ShipTypeId.FRIGATE: return new Frigate(info);
+            case common.ShipTypeId.BATTLE_CRUISER: return new BattleCruiser(info);
+            case common.ShipTypeId.UFO: return new UFO(info);
+        }
+        console.log("unknow ship type: " + info.shipType);
+    }
+}
 
 class Game {
     constructor() {
@@ -404,16 +522,18 @@ class Game {
             console.log("game spawning ships for team: " + i);
             var currentTeam = this.teams[i];
             currentTeam.players.forEach(player => {
-                player.setShip(new Ship(
-                    new common.ShipInfo(
-                        player.getId(),
-                        i,
-                        new common.Point(250, 100),
-                        new common.Vec2(0, 0),
-                        0,
-                        player.getShipType()
+                player.setShip(
+                    ShipFactory.Create(
+                        new common.ShipInfo(
+                            player.getId(),
+                            i,
+                            new common.Point(250, 100),
+                            new common.Vec2(0, 0),
+                            0,
+                            player.getShipType()
+                        )
                     )
-                ));
+                );
                 this.addEntity(player.getShip());
             }, this);
 
@@ -426,6 +546,18 @@ class Game {
     }
 
     onPlaying(dt) {
+        // updating entities
+        this.onUpdateEntities(dt);
+
+        // checking collisions
+        this.onCheckCollisions(dt);
+    }
+
+    onDone(dt) {
+
+    }
+
+    onUpdateEntities(dt) {
         // update sync timer
         this.updateSyncAccumulator(dt);
         // whenever a position sync is required, every ~ 2sec
@@ -436,8 +568,10 @@ class Game {
 
         let toRemove = [];
 
-        this.entities.forEach(entity => {
-            // update entity and sub objetcs
+        // updating
+        for (var i = 0; i < this.entities.length; i++) {
+            let entity = this.entities[i];
+            // update entity and sub objects
             entity.update(dt);
 
             switch (entity.getType()) {
@@ -461,17 +595,30 @@ class Game {
                         let radAngle = angle * Math.PI / 180;
                         let projectileDirection = new common.Vec2(Math.cos(radAngle), Math.sin(radAngle));
                         let projectileVelocity = projectileDirection.mul(entity.getProjectileSpeed());
-                        let projectile = new Projectile(
-                            new common.ProjectileInfo(
-                                this.getNextProjectileId(),
-                                entity.getTeam(),
-                                entity.getPosition(),
-                                projectileVelocity,
-                                entity.getRotation(),
-                                1
-                            )
-                        );
-                        this.addEntity(projectile);
+                        // either big or small one ;D ?
+                        if (entity.getPowerFactor() > 2) {
+                            this.addEntity(
+                                new ThickLaser(
+                                    this.getNextProjectileId(),
+                                    entity.getTeam(),
+                                    entity.getPosition(),
+                                    projectileVelocity,
+                                    entity.getRotation(),
+                                    entity.getPowerFactor()
+                                )
+                            );
+                        } else {
+                            this.addEntity(
+                                new ThinLaser(
+                                    this.getNextProjectileId(),
+                                    entity.getTeam(),
+                                    entity.getPosition(),
+                                    projectileVelocity,
+                                    entity.getRotation(),
+                                    entity.getPowerFactor()
+                                )
+                            );
+                        }
                     }
                     break;
 
@@ -485,13 +632,31 @@ class Game {
                     }
                     break;
             }
-        }, this);
+        }
 
         toRemove.forEach(entity => this.removeEntity(entity), this);
     }
 
-    onDone(dt) {
+    onCheckCollisions(dt) {
+        let toRemove = [];
 
+        for (var i = 0; i < this.entities.length; i++) {
+            for (var j = i; j < this.entities.length; j++) {
+                let a = this.entities[i];
+                let b = this.entities[j];
+                // ignore same team
+                if (a.getTeam() === b.getTeam())
+                    continue;
+
+                // ignore entities that are going to be destroyed
+                if (toRemove.indexOf(a) != -1 || toRemove.indexOf(b) != -1)
+                    continue;
+
+
+            }
+        }
+
+        toRemove.forEach(entity => this.removeEntity(entity), this);
     }
 }
 

@@ -41,6 +41,14 @@ const EntityTypeId = {
 }
 exports.EntityTypeId = EntityTypeId;
 
+const ShipTypeId = {
+    HUNTER: 0,
+    FRIGATE: 1,
+    BATTLE_CRUISER: 2,
+    UFO: 3
+}
+exports.ShipTypeId = ShipTypeId;
+
 class AbstractNetworkMessage {
     constructor(id) {
         this.id = id;
@@ -227,9 +235,10 @@ class ShipInfo extends AbstractEntityInfo {
 exports.ShipInfo = ShipInfo;
 
 class ProjectileInfo extends AbstractEntityInfo {
-    constructor(id, team, position, velocity, rotation, projectileType) {
+    constructor(id, team, position, velocity, rotation, power, thickness) {
         super(EntityTypeId.PROJECTILE, id, team, position, velocity, rotation);
-        this.projectileType = projectileType;
+        this.power = power;
+        this.thickness = thickness;
     }
 }
 exports.ProjectileInfo = ProjectileInfo;

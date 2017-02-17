@@ -5,6 +5,9 @@ var GameLayer = NetLayer.extend({
         this.account = account;
         this.players = [];
         this.entities = [];
+        this.mousePosition = new Point(0, 0);
+        this.lookAccumulator = 0;
+        this.lookInterval = 1.0 / 10;
 
         this.addChild(Background.create(Resources.assets.background.black, cc.winSize), 0);
 
@@ -14,6 +17,17 @@ var GameLayer = NetLayer.extend({
     },
     update: function (dt) {
         this.entities.forEach(entity => entity.update(dt));
+        if (this.localShip != null) {
+            let angle = this.localShip.getPosition().angleToPoint(this.mousePosition);
+            // local update
+            this.localShip.setRotation(angle);
+            // remote update
+            this.lookAccumulator -= dt;
+            if (this.lookAccumulator <= 0) {
+                this.lookAccumulator = this.lookInterval;
+                GravityEvent.fire(NetworkEventType.OUTGOING_MESSAGE, new RotationRequest(angle));
+            }
+        }
     },
     getPlayer: function (playerId) {
         return this.players.find(player => player.info.id === playerId);
@@ -66,6 +80,7 @@ var GameLayer = NetLayer.extend({
                         this.addEntity(ship);
                         break;
                     case EntityTypeId.PROJECTILE:
+                        cc.log(message.entityInfo);
                         this.addEntity(new Projectile(message.entityInfo));
                         break;
                 }
@@ -118,6 +133,10 @@ var GameLayer = NetLayer.extend({
         return entityId === this.account.id;
     },
     initLocalShip: function (ship) {
+        this.localShip = ship;
+        this.localShip.setLocal(true);
+
+        let that = this;
         this.mouseListener = {
             event: cc.EventListener.MOUSE,
             onMouseDown: function (event) {
@@ -138,7 +157,7 @@ var GameLayer = NetLayer.extend({
             onMouseMove: function (event) {
                 let x = event.getLocationX();
                 let y = event.getLocationY();
-                ship.setLookingDirection(new Point(x, y));
+                that.mousePosition = new Point(x, y);
             }
         }
         this.keyboardListener = {

@@ -1,26 +1,27 @@
 const ShipColor = {
-    COLOR_TEAM_ZERO: "green",
-    COLOR_TEAM_ONE: "red"
+    COLOR_TEAM_ZERO: 0,
+    COLOR_TEAM_ONE: 3
 }
 
 class AbstractSpriteEntity extends AbstractEntity {
 
-    static SpriteColor(team) {
-        return team == 0 ? ShipColor.COLOR_TEAM_ONE : ShipColor.COLOR_TEAM_ZERO;
-    }
-
-    static SpriteResource(type, team) {
-        return Resources.assets.game.ship["type_" + type][Ship.SpriteColor(team)];
-    }
-
     constructor(info, image) {
         super(info);
         this.image = image;
+        this.isLocal = false;
         this.sprite = new cc.Sprite(image);
         this.sprite.setAnchorPoint(new cc.Point(0.5, 0.5));
 
         this.setPosition(info.position);
         this.setRotation(info.rotation);
+    }
+
+    setLocal(value) {
+        this.isLocal = value;
+    }
+
+    getSprite() {
+        return this.sprite;
     }
 
     setPosition(position) {
@@ -30,9 +31,15 @@ class AbstractSpriteEntity extends AbstractEntity {
 
     setRotation(angle) {
         super.setRotation(angle);
+    }
+
+    setSpriteRotation(angle) {
+        this.sprite.setRotation(this.getSpriteNormalizedRotation(angle));
+    }
+
+    getSpriteNormalizedRotation(angle) {
         let normalAngle = 90;
-        let spriteAngle = normalAngle - angle;
-        this.sprite.setRotation(spriteAngle);
+        return normalAngle - angle;
     }
 
     update(dt) {
@@ -43,12 +50,17 @@ class AbstractSpriteEntity extends AbstractEntity {
 
 class Projectile extends AbstractSpriteEntity {
 
-    static ProjectileResource(type) {
-        return Resources.assets.game.laser.blue;
+    static ProjectileResource(power, thickness) {
+        return Resources.assets.game.laser + power + "_" + thickness + ".png";
     }
 
     constructor(info) {
-        super(info, Projectile.ProjectileResource(info.projectileType));
+        super(info, Projectile.ProjectileResource(info.power, info.thickness));
+    }
+
+    setRotation(angle) {
+        super.setRotation(angle);
+        super.setSpriteRotation(angle);
     }
 }
 
@@ -59,7 +71,7 @@ class Ship extends AbstractSpriteEntity {
     }
 
     static SpriteResource(type, team) {
-        return Resources.assets.game.ship["type_" + type][Ship.SpriteColor(team)];
+        return Resources.assets.game.ship + type + "_" + Ship.SpriteColor(team) + ".png";
     }
 
     constructor(info) {
@@ -68,11 +80,15 @@ class Ship extends AbstractSpriteEntity {
         this.shooting = false;
     }
 
-    setLookingDirection(target) {
-        let angle = this.getPosition().angleToPoint(target);
-        // update local
+    setRotation(angle) {
         super.setRotation(angle);
-        GravityEvent.fire(NetworkEventType.OUTGOING_MESSAGE, new RotationRequest(angle));
+        let normalizedAngle = this.getSpriteNormalizedRotation(angle);
+        if (this.isLocal) {
+            this.sprite.setRotation(normalizedAngle);
+        } else {
+            // smoothly rotate to desired angle
+            this.getSprite().runAction(cc.RotateTo.create(0.08, normalizedAngle));
+        }
     }
 
     setDirection(newDirection) {
