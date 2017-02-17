@@ -43,6 +43,9 @@ var Resources = {
                     red: "res/assets/game/ship/42.png",
                     yellow: "res/assets/game/ship/43.png"
                 }
+            },
+            laser: {
+                blue: "res/assets/game/laser/laserBlue01.png"
             }
         }
     }

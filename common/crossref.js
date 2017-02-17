@@ -12,6 +12,7 @@ exports.GameStateId = GameStateId;
 const MessageId = {
     CS_IDENTIFICATION_REQ: 0,
     CS_MOVEMENT_REQ: 1,
+    CS_SHOOT_REQ: 2,
 
     SC_IDENTIFICATION_RES: 100,
     SC_PLAYER_JOIN: 101,
@@ -65,6 +66,13 @@ class MovementRequest extends AbstractNetworkMessage {
     }
 }
 exports.MovementRequest = MovementRequest;
+
+class ShootRequest extends AbstractNetworkMessage {
+    constructor(value) {
+        super(MessageId.CS_SHOOT_REQ);
+        this.value = value;
+    }
+}
 
 class IdentificationResult extends AbstractNetworkMessage {
     constructor(code, accountInfo) {
@@ -145,7 +153,6 @@ class Vec2 extends AbstractCoordinate {
         if (length === 0)
             return this;
         let factor = 1.0 / length;
-        console.log("fact: " + factor + " len: " + length);
         return this.mul(factor);
     }
 
@@ -162,6 +169,12 @@ class Point extends AbstractCoordinate {
 
     vectorToPoint(p) {
         return new Vec2(p.x - this.x, p.y - this.y);
+    }
+
+    interpolate(p, segment) {
+        let nx = this.x + (p.x - this.x) * segment;
+        let ny = this.y + (p.y - this.y) * segment;
+        return new Point(nx, ny);
     }
 }
 exports.Point = Point;
@@ -184,54 +197,70 @@ class AccountInfo extends PlayerInfo {
 exports.AccountInfo = AccountInfo;
 
 class AbstractEntityInfo {
-    constructor(type, id, team, position, velocity) {
+    constructor(type, id, team, position, velocity, rotation) {
         this.type = type;
         this.id = id;
         this.team = team;
         this.position = position;
         this.velocity = velocity;
+        this.rotation = rotation;
     }
 }
 exports.AbstractEntityInfo = AbstractEntityInfo;
 
 class ShipInfo extends AbstractEntityInfo {
-    constructor(id, team, position, velocity, shipType) {
-        super(EntityTypeId.SHIP, id, team, position, velocity);
+    constructor(id, team, position, velocity, rotation, shipType) {
+        super(EntityTypeId.SHIP, id, team, position, velocity, rotation);
         this.shipType = shipType;
     }
 }
 exports.ShipInfo = ShipInfo;
 
 class ProjectileInfo extends AbstractEntityInfo {
-    constructor(id, team, position, velocity, projectileType) {
-        super(EntityTypeId.PROJECTILE, id, team, position, velocity);
+    constructor(id, team, position, velocity, rotation, projectileType) {
+        super(EntityTypeId.PROJECTILE, id, team, position, velocity, rotation);
         this.projectileType = projectileType;
     }
 }
 exports.ProjectileInfo = ProjectileInfo;
 
 class BonusInfo extends AbstractEntityInfo {
-    constructor(id, team, position, velocity, bonusType) {
-        super(EntityTypeId.BONUS, id, team, position, velocity);
+    constructor(id, team, position, velocity, rotation, bonusType) {
+        super(EntityTypeId.BONUS, id, team, position, velocity, rotation);
         this.bonusType = bonusType;
     }
 }
 exports.BonusInfo = BonusInfo;
 
 class RockInfo extends AbstractEntityInfo {
-    constructor(id, team, position, velocity, rockType) {
-        super(EntityTypeId.ROCK, id, team, position, velocity);
+    constructor(id, team, position, velocity, rotation, rockType) {
+        super(EntityTypeId.ROCK, id, team, position, velocity, rotation);
         this.rockType = rockType;
     }
 }
 exports.RockInfo = RockInfo;
 
-class AbstractEntity {
-    constructor(info) {
-        this.info = info;
+class AbstractUpdatable {
+    constructor() {
+        this.updatables = [];
     }
 
-    updateInfo(info) {
+    addUpdatable(updatable) {
+        this.updatables.push(updatable);
+    }
+
+    removeUpdatable(updatable) {
+        this.updatables = this.updatables.filter(u => u !== updatable);
+    }
+
+    update(dt) {
+        this.updatables.forEach(updatable => updatable.update(dt));
+    }
+}
+
+class AbstractEntity extends AbstractUpdatable {
+    constructor(info) {
+        super();
         this.info = info;
     }
 
@@ -263,6 +292,14 @@ class AbstractEntity {
         this.info.velocity = newVelocity;
     }
 
+    getRotation() {
+        return this.info.rotation;
+    }
+
+    setRotation(rotation) {
+        this.info.rotation = rotation;
+    }
+
     update(dt) {
         var velocity = this.getVelocity();
         if (velocity.x != 0 || velocity.y != 0) {
@@ -273,6 +310,7 @@ class AbstractEntity {
             );
             this.setPosition(nextPosition);
         }
+        super.update(dt);
     }
 }
 exports.AbstractEntity = AbstractEntity;

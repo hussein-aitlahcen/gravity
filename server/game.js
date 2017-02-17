@@ -4,6 +4,13 @@ var io = require("socket.io")(server);
 var common = require("../common/crossref");
 var createGame = require("gameloop");
 
+const GameConstants = {
+    MAP_MIN_X: -20,
+    MAP_MIN_Y: -20,
+    MAP_MAX_X: 600,
+    MAP_MAX_Y: 800
+}
+
 class Account {
     constructor(id, username, password, banned, connected, experience, level, shipType) {
         this.id = id;
@@ -44,6 +51,7 @@ class GameHandler {
         this.game = game;
         this.addHandler(common.MessageId.CS_IDENTIFICATION_REQ, this.handleIdentification);
         this.addHandler(common.MessageId.CS_MOVEMENT_REQ, this.handleMovementRequest);
+        this.addHandler(common.MessageId.CS_SHOOT_REQ, this.handleShootRequest);
     }
 
     addHandler(id, callback) {
@@ -81,18 +89,22 @@ class GameHandler {
 
     handleMovementRequest(player, message) {
         let ship = player.getShip();
-        let vec = new common.Vec2(message.direction.x, message.direction.y);
-        let newVelocity = vec.normalized().mul(ship.getSpeed());
-        console.log(newVelocity);
+        let direction = new common.Vec2(message.direction.x, message.direction.y);
+        let newVelocity = direction.normalized().mul(ship.getSpeed());
         ship.setVelocity(newVelocity);
         this.game.broadcast(
             new common.EntitySync(
                 ship.getId(),
                 ship.getPosition(),
                 newVelocity,
-                new common.Vec2(0, 0)
+                ship.getRotation()
             )
         );
+    }
+
+    handleShootRequest(player, message) {
+        let ship = player.getShip();
+        ship.setShooting(message.value);
     }
 }
 
@@ -132,6 +144,10 @@ class Player {
         this.ship = ship;
     }
 
+    getShipType() {
+        return this.account.shipType;
+    }
+
     getUsername() {
         return this.account.username;
     }
@@ -153,10 +169,32 @@ class Player {
     }
 }
 
-class Ship extends common.AbstractEntity {
+class AbstractNetworkEntity extends common.AbstractEntity {
+    constructor(info) {
+        super(info);
+    }
+
+    toNetwork() {
+        return this.info;
+    }
+}
+
+class Ship extends AbstractNetworkEntity {
     constructor(info) {
         super(info)
         this.speed = 200;
+        this.shootSpeed = 0.2;
+        this.projectileSpeed = 350;
+        this.shooting = false;
+        this.lastShootAccumulator = 0;
+    }
+
+    getProjectileSpeed() {
+        return this.projectileSpeed;
+    }
+
+    setProjectileSpeed(speed) {
+        this.projectileSpeed = speed;
     }
 
     getSpeed() {
@@ -167,15 +205,37 @@ class Ship extends common.AbstractEntity {
         this.speed = speed;
     }
 
-    update(dt) {
-        super.update(dt);
+    setShooting(value) {
+        this.shooting = value;
     }
 
-    toNetwork() {
-        return this.info;
+    canShoot() {
+        return this.shooting && this.lastShootAccumulator <= 0;
+    }
+
+    resetShootAccumulator() {
+        this.lastShootAccumulator = this.shootSpeed;
+    }
+
+    getShootSpeed() {
+        return this.shootSpeed;
+    }
+
+    setShootSpeed(value) {
+        this.shootSpeed = value;
+    }
+
+    update(dt) {
+        super.update(dt);
+        this.lastShootAccumulator -= dt;
     }
 }
 
+class Projectile extends AbstractNetworkEntity {
+    constructor(info) {
+        super(info);
+    }
+}
 
 class Team {
     constructor(id) {
@@ -214,7 +274,7 @@ class Game {
             });
             socket.on("disconnect", function () {
                 console.log("Client disconnected.");
-                if (player.getAccount() !== undefined) {
+                if (player.getAccount() !== null) {
                     player.getAccount().connected = false;
                     accountManager.saveAccount(player.getAccount());
                 }
@@ -223,6 +283,7 @@ class Game {
     }
 
     goToGameState(newState) {
+        console.log("game state changed: " + newState);
         this.state = newState;
         this.broadcast(new common.GameStateUpdate(newState));
     }
@@ -237,12 +298,24 @@ class Game {
         );
     }
 
+    removeEntity(entity) {
+        let index = this.entities.indexOf(entity);
+        if (index != -1) {
+            this.entities.splice(index, 1);
+        }
+        this.broadcast(new common.EntityDestroy(entity.getId()));
+    }
+
     getEntity(entityId) {
         this.entities.find(entity => entity.getId() === entityId);
     }
 
     broadcast(message) {
         io.sockets.emit("message", message);
+    }
+
+    getNextProjectileId() {
+        return this.nextProjectileId--;
     }
 
     getNextTeam() {
@@ -263,6 +336,18 @@ class Game {
         player.setTeam(nextTeam);
         nextTeam.addPlayer(player);
         this.broadcast(new common.PlayerJoin(player.toNetwork()));
+    }
+
+    isSyncRequired() {
+        return this.syncAccumulator >= this.syncInterval;
+    }
+
+    updateSyncAccumulator(dt) {
+        this.syncAccumulator += dt;
+    }
+
+    resetSyncAccumulator() {
+        this.syncAccumulator = 0;
     }
 
     update(dt) {
@@ -286,7 +371,6 @@ class Game {
     }
 
     onInit(dt) {
-        console.log("game state init");
         this.teams = [
             new Team(0),
             new Team(1)
@@ -294,19 +378,17 @@ class Game {
         this.entities = [];
         this.syncAccumulator = 0;
         this.syncInterval = 2;
+        this.nextProjectileId = -1;
         this.goToGameState(common.GameStateId.WAITING_PLAYERS);
     }
 
     onWaitingPlayers(dt) {
-
         // each team should have at least one player
         if (this.teams.some(team => team.players.length == 0)) {
             return;
         }
 
-        console.log("game state ready");
-        this.goToGameState(common.GameStateId.WAITING_READY);
-
+        // spawn ship for each player
         for (var i = 0; i < this.teams.length; i++) {
             console.log("game spawning ships for team: " + i);
             var currentTeam = this.teams[i];
@@ -317,11 +399,14 @@ class Game {
                         i,
                         new common.Point(250, 100),
                         new common.Vec2(0, 0),
-                        i
+                        0,
+                        player.getShipType()
                     )
                 ));
                 this.addEntity(player.getShip());
             }, this);
+
+            this.goToGameState(common.GameStateId.WAITING_READY);
         }
     }
 
@@ -330,7 +415,64 @@ class Game {
     }
 
     onPlaying(dt) {
-        this.entities.forEach(entity => entity.update(dt));
+        // update sync timer
+        this.updateSyncAccumulator(dt);
+        // whenever a position sync is required, every ~ 2sec
+        var syncRequired = this.isSyncRequired();
+        if (syncRequired) {
+            this.resetSyncAccumulator();
+        }
+
+        let toRemove = [];
+
+        this.entities.forEach(entity => {
+            // update entity and sub objetcs
+            entity.update(dt);
+
+            switch (entity.getType()) {
+                case common.EntityTypeId.SHIP:
+                    // sync ship position/velocity/rot
+                    if (syncRequired) {
+                        this.broadcast(
+                            new common.EntitySync(
+                                entity.getId(),
+                                entity.getPosition(),
+                                entity.getVelocity(),
+                                entity.getRotation()
+                            )
+                        );
+                    }
+                    // projectile creation while shooting
+                    if (entity.canShoot()) {
+                        entity.resetShootAccumulator();
+                        let projVelocity = new common.Vec2(0, entity.getProjectileSpeed());
+                        let projectile = new Projectile(
+                            new common.ProjectileInfo(
+                                this.getNextProjectileId(),
+                                entity.getTeam(),
+                                entity.getPosition(),
+                                projVelocity,
+                                0,
+                                1
+                            )
+                        );
+                        this.addEntity(projectile);
+                    }
+                    break;
+
+                case common.EntityTypeId.PROJECTILE:
+                    let position = entity.getPosition();
+                    if (position.x >= GameConstants.MAP_MAX_X ||
+                        position.x <= GameConstants.MAP_MIN_X ||
+                        position.y >= GameConstants.MAP_MAX_Y ||
+                        position.y <= GameConstants.MAP_MIN_Y) {
+                        toRemove.push(entity);
+                    }
+                    break;
+            }
+        }, this);
+
+        toRemove.forEach(entity => this.removeEntity(entity), this);
     }
 
     onDone(dt) {

@@ -20,7 +20,6 @@ socket.on("connect", function () {
     cc.eventManager.addListener(socketGravityListener, 1);
 });
 socket.on("message", function (message) {
-    cc.log(message);
     GravityEvent.fire(NetworkEventType.INCOMMING_MESSAGE, message);
 });
 socket.on("disconnect", function () {

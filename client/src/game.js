@@ -6,7 +6,7 @@ var GameLayer = NetLayer.extend({
         this.players = [];
         this.entities = [];
 
-        this.addChild(Background.create(Resources.assets.background.blue, cc.winSize), 0);
+        this.addChild(Background.create(Resources.assets.background.black, cc.winSize), 0);
 
         this.scheduleUpdate();
 
@@ -29,7 +29,7 @@ var GameLayer = NetLayer.extend({
         if (entity.sprite) {
             this.addChild(entity.sprite);
         } else {
-            cc.log("entity withouth sprite");
+            cc.log("entity added withouth sprite");
         }
     },
     removeEntity: function (entityId) {
@@ -38,6 +38,8 @@ var GameLayer = NetLayer.extend({
             this.entities = this.entities.filter(entity => entity.info.id !== entityId);
             if (entity.sprite) {
                 this.removeChild(entity.sprite);
+            } else {
+                cc.log("entity removed withouth sprite");
             }
         }
     },
@@ -45,7 +47,6 @@ var GameLayer = NetLayer.extend({
         return this.entities.find(entity => entity.info.id === entityId);
     },
     onIncommingMessage: function (message) {
-        cc.log("message received");
         switch (message.id) {
             case MessageId.SC_PLAYER_JOIN:
                 cc.log("player join");
@@ -64,6 +65,9 @@ var GameLayer = NetLayer.extend({
                         }
                         this.addEntity(ship);
                         break;
+                    case EntityTypeId.PROJECTILE:
+                        this.addEntity(new Projectile(message.entityInfo));
+                        break;
                 }
                 break;
 
@@ -80,20 +84,24 @@ var GameLayer = NetLayer.extend({
                 break;
 
             case MessageId.SC_ENTITY_SYNC:
-                cc.log("entity sync");
                 let entity = this.getEntity(message.entityId);
+                let newVelocity = new Vec2(message.velocity.x, message.velocity.y);
+                let newPosition = new Point(message.position.x, message.position.y);
                 let currentPosition = entity.getPosition();
-                let distanceError = currentPosition.vectorToPoint(message.position).length();
-                const epsilon = 30;
+                let distanceError = currentPosition.vectorToPoint(newPosition).length();
+                const epsilon = 20;
                 if (distanceError > epsilon) {
-                    entity.setPosition(message.position);
                     cc.log("movement correction");
+                    let segment = 1;
+                    let interpolation = currentPosition.interpolate(newPosition, segment);
+                    entity.setPosition(interpolation);
                 }
-                entity.setVelocity(message.velocity);
+                entity.setVelocity(newVelocity);
                 break;
 
             case MessageId.SC_ENTITY_DESTROY:
                 cc.log("entity destroy");
+                this.removeEntity(this.getEntity(message.entityId));
                 break;
         }
     },
@@ -107,21 +115,40 @@ var GameLayer = NetLayer.extend({
         return ship.info.id === this.account.id;
     },
     initLocalShip: function (ship) {
-        this.movementListener = {
+        this.mouseListener = {
+            event: cc.EventListener.MOUSE,
+            onMouseDown: function (event) {
+                switch (event.getButton()) {
+                    case cc.EventMouse.BUTTON_LEFT:
+                        ship.setShooting(true);
+                        break;
+                }
+            },
+            onMouseUp: function (event) {
+                switch (event.getButton()) {
+                    case cc.EventMouse.BUTTON_LEFT:
+                        ship.setShooting(false);
+                        break;
+                }
+            },
+            onMouseScroll: function (event) { },
+            onMouseMove: function (event) { }
+        }
+        this.keyboardListener = {
             event: cc.EventListener.KEYBOARD,
             onKeyPressed: function (keyCode, event) {
                 switch (keyCode) {
                     case cc.KEY.up:
-                        ship.setVelocityLocalY(1);
+                        ship.setDirectionY(1);
                         break;
                     case cc.KEY.down:
-                        ship.setVelocityLocalY(-1);
+                        ship.setDirectionY(-1);
                         break;
                     case cc.KEY.left:
-                        ship.setVelocityLocalX(-1);
+                        ship.setDirectionX(-1);
                         break;
                     case cc.KEY.right:
-                        ship.setVelocityLocalX(1);
+                        ship.setDirectionX(1);
                         break;
                 }
             },
@@ -129,16 +156,17 @@ var GameLayer = NetLayer.extend({
                 switch (keyCode) {
                     case cc.KEY.up:
                     case cc.KEY.down:
-                        ship.setVelocityLocalY(0);
+                        ship.setDirectionY(0);
                         break;
                     case cc.KEY.left:
                     case cc.KEY.right:
-                        ship.setVelocityLocalX(0);
+                        ship.setDirectionX(0);
                         break;
                 }
             }
         };
-        cc.eventManager.addListener(this.movementListener, this);
+        cc.eventManager.addListener(this.mouseListener, this);
+        cc.eventManager.addListener(this.keyboardListener, this);
     }
 });
 
