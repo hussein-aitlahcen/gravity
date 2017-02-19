@@ -1,5 +1,11 @@
 "use strict";
 
+if (!Array.prototype.clear) {
+    Array.prototype.clear = function () {
+        this.splice(0, this.length);
+    };
+}
+
 const GameStateId = {
     INITALIZING: 0,
     WAITING_PLAYERS: 1,
@@ -14,6 +20,7 @@ const MessageId = {
     CS_MOVEMENT_REQ: 1,
     CS_SHOOT_REQ: 2,
     CS_ROTATION_REQ: 3,
+    CS_READY: 4,
 
     SC_IDENTIFICATION_RES: 100,
     SC_PLAYER_JOIN: 101,
@@ -21,7 +28,8 @@ const MessageId = {
     SC_ENTITY_DESTROY: 103,
     SC_GAME_STATE_UPDATE: 104,
     SC_ENTITY_UPDATE: 105,
-    SC_ENTITY_SYNC: 106
+    SC_ENTITY_SYNC: 106,
+    SC_ENTITY_HIT: 107
 }
 exports.MessageId = MessageId;
 
@@ -88,6 +96,12 @@ class RotationRequest extends AbstractNetworkMessage {
     }
 }
 
+class PlayerReady extends AbstractNetworkMessage {
+    constructor() {
+        super(MessageId.CS_READY);
+    }
+}
+
 class IdentificationResult extends AbstractNetworkMessage {
     constructor(code, accountInfo) {
         super(MessageId.SC_IDENTIFICATION_RES);
@@ -140,6 +154,16 @@ class EntitySync extends AbstractNetworkMessage {
     }
 }
 exports.EntitySync = EntitySync;
+
+class EntityHit extends AbstractNetworkMessage {
+    constructor(entityId, position, power) {
+        super(MessageId.SC_ENTITY_HIT);
+        this.entityId = entityId;
+        this.position = position;
+        this.power = power;
+    }
+}
+exports.EntityHit = EntityHit;
 
 class AbstractCoordinate {
     constructor(x, y) {

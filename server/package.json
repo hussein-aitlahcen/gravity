@@ -20,6 +20,8 @@
     "express": "*",
     "socket.io": "*",
     "underscore": "*",
-    "gameloop": "*"
+    "gameloop": "*",
+    "rbush": "*",
+    "@turf/turf": "*"
   }
 }

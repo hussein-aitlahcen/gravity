@@ -19,6 +19,7 @@
         "src/network.js",
         "src/player.js",
         "src/entity.js",
+        "src/hit.js",
         "src/netlayer.js",
         "src/login.js",
         "src/game.js"

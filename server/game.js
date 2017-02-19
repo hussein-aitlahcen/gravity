@@ -1,14 +1,16 @@
 "use strict";
 
-var io = require("socket.io")(server);
-var common = require("../common/crossref");
-var createGame = require("gameloop");
+let io = require("socket.io")(server);
+let common = require("../common/crossref");
+let createGame = require("gameloop");
+let turf = require("@turf/turf");
 
 const GameConstants = {
     MAP_MIN_X: -20,
     MAP_MIN_Y: -20,
     MAP_MAX_X: 600,
-    MAP_MAX_Y: 800
+    MAP_MAX_Y: 800,
+    SCALE: 0.5
 }
 
 class Account {
@@ -47,12 +49,13 @@ class AccountManager {
 
 class GameHandler {
     constructor(game) {
-        this.handlers = {};
         this.game = game;
+        this.handlers = {};
         this.addHandler(common.MessageId.CS_IDENTIFICATION_REQ, this.handleIdentification);
         this.addHandler(common.MessageId.CS_MOVEMENT_REQ, this.handleMovementRequest);
         this.addHandler(common.MessageId.CS_SHOOT_REQ, this.handleShootRequest);
         this.addHandler(common.MessageId.CS_ROTATION_REQ, this.handleRotationRequest);
+        this.addHandler(common.MessageId.CS_READY, this.handleReady);
     }
 
     addHandler(id, callback) {
@@ -106,6 +109,10 @@ class GameHandler {
         ship.setRotation(message.angle);
         this.game.broadcastSync(ship);
     }
+
+    handleReady(player, message) {
+        player.setReady(true);
+    }
 }
 
 class Player {
@@ -114,6 +121,15 @@ class Player {
         this.ship = null;
         this.account = null;
         this.team = null;
+        this.ready = false;
+    }
+
+    isReady() {
+        return this.ready;
+    }
+
+    setReady(value) {
+        this.ready = value;
     }
 
     getTeam() {
@@ -169,11 +185,60 @@ class Player {
     }
 }
 
+class Rectangle {
+    constructor(x, y, width, height) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+    }
+
+    getBounds(angle) {
+        let hw = this.width / 2;
+        let hh = this.height / 2;
+        angle = 0;
+        return {
+            bottomLeft: this.rotatePoint({
+                x: -hw,
+                y: -hh
+            }, angle),
+            bottomRight: this.rotatePoint({
+                x: hw,
+                y: -hh
+            }, angle),
+            topRight: this.rotatePoint({
+                x: hw,
+                y: hh
+            }, angle),
+            topLeft: this.rotatePoint({
+                x: -hw,
+                y: hh
+            }, angle)
+        };
+    }
+
+    rotatePoint(point, angle) {
+        let pivot = {
+            x: this.x,
+            y: this.y
+        };
+        let cos = Math.cos(angle);
+        let sin = Math.sin(angle);
+        let rotatedX = cos * (point.x - pivot.x) - sin * (point.y - pivot.y)
+        let rotatedY = sin * (point.x - pivot.x) + cos * (point.y - pivot.y);
+        return {
+            x: rotatedX - pivot.x,
+            y: rotatedY - pivot.y
+        };
+    }
+}
+
 class AbstractNetworkEntity extends common.AbstractEntity {
     constructor(info, width, height) {
         super(info);
-        this.width = width;
-        this.height = height;
+        this.width = width * GameConstants.SCALE;
+        this.height = height * GameConstants.SCALE;
+        this.updateRect();
     }
 
     getWidth() {
@@ -184,27 +249,53 @@ class AbstractNetworkEntity extends common.AbstractEntity {
         return this.height;
     }
 
-    getBounds() {
+    setPosition(newPosition) {
+        super.setPosition(newPosition);
+        this.updateRect();
+    }
+
+    setRotation(newRotation) {
+        super.setRotation(newRotation);
+        this.updateRect();
+    }
+
+    updateRect() {
         let pos = this.getPosition();
-        let w = this.getWidth();
-        let h = this.getHeight();
-        let hw = w / 2;
-        let hh = h / 2;
-        return {
-            minx: pos.x - hw,
-            miny: pos.y - hh,
-            maxx: pos.x + hw,
-            maxy: pos.y + hh
-        };
+        this.rect = new Rectangle(
+            pos.x,
+            pos.y,
+            this.getWidth(),
+            this.getHeight()
+        );
+    }
+
+    getPolygon() {
+        let bounds = this.rect.getBounds(this.getRotation());
+        let polygon = turf.polygon([
+            [
+                [
+                    bounds.bottomLeft.x, bounds.bottomLeft.y
+                ],
+                [
+                    bounds.bottomRight.x, bounds.bottomRight.y
+                ],
+                [
+                    bounds.topRight.x, bounds.topRight.y
+                ],
+                [
+                    bounds.topLeft.x, bounds.topLeft.y
+                ],
+                [
+                    bounds.bottomLeft.x, bounds.bottomLeft.y
+                ]
+            ]
+        ]);
+        return polygon;
     }
 
     collideWith(entity) {
-        let localBounds = this.getBounds();
-        let remoteBounds = entity.getBounds();
-        return !(remoteBounds.minx > localBounds.maxx ||
-            remoteBounds.maxx < localBounds.minx ||
-            remoteBounds.maxy > localBounds.miny ||
-            remoteBounds.miny < localBounds.maxy);
+        let intersection = turf.intersect(this.getPolygon(), entity.getPolygon());
+        return intersection !== undefined;
     }
 
     toNetwork() {
@@ -271,6 +362,10 @@ class Ship extends AbstractNetworkEntity {
     update(dt) {
         super.update(dt);
         this.lastShootAccumulator -= dt;
+        let position = this.getPosition();
+        if (this.position.x >= GameConstants.MAP_MAX_X || this.position.x <= GameConstants.MIN_MAP_X) {
+
+        }
     }
 }
 
@@ -350,18 +445,34 @@ class Team {
         this.players.push(player);
     }
 
+    ready() {
+        return this.players.every(player => player.isReady());
+    }
+
+    getPlayers(callback) {
+        return this.players.filter(callback);
+    }
+
     broadcast(message) {
         this.players.forEach(player => player.send(message));
+    }
+
+    clear() {
+        this.players.clear();
     }
 }
 
 class ShipFactory {
     static Create(info) {
         switch (info.shipType) {
-            case common.ShipTypeId.HUNTER: return new Hunter(info);
-            case common.ShipTypeId.FRIGATE: return new Frigate(info);
-            case common.ShipTypeId.BATTLE_CRUISER: return new BattleCruiser(info);
-            case common.ShipTypeId.UFO: return new UFO(info);
+            case common.ShipTypeId.HUNTER:
+                return new Hunter(info);
+            case common.ShipTypeId.FRIGATE:
+                return new Frigate(info);
+            case common.ShipTypeId.BATTLE_CRUISER:
+                return new BattleCruiser(info);
+            case common.ShipTypeId.UFO:
+                return new UFO(info);
         }
         console.log("unknow ship type: " + info.shipType);
     }
@@ -369,6 +480,12 @@ class ShipFactory {
 
 class Game {
     constructor() {
+        this.teams = [
+            new Team(0),
+            new Team(1)
+        ];
+        this.entitiesToRemove = [];
+        this.entities = [];
         this.state = common.GameStateId.INITALIZING;
         this.core = createGame();
         this.handler = new GameHandler(this);
@@ -386,8 +503,6 @@ class Game {
             console.log("Client connected.");
             let player = new Player(socket);
             socket.on("message", function (message) {
-                console.log("Client message: ");
-                console.log(message);
                 handler.handle(player, message);
             });
             socket.on("disconnect", function () {
@@ -413,6 +528,19 @@ class Game {
                 entity.getType(),
                 entity.toNetwork()
             )
+        );
+    }
+
+    spawnEntities() {
+        this.entities.forEach(
+            entity =>
+            this.broadcast(
+                new common.EntitySpawn(
+                    entity.getType(),
+                    entity.toNetwork()
+                )
+            ),
+            this
         );
     }
 
@@ -500,14 +628,13 @@ class Game {
     }
 
     onInit(dt) {
-        this.teams = [
-            new Team(0),
-            new Team(1)
-        ];
-        this.entities = [];
+        this.teams.forEach(team => team.clear());
+        this.entities.clear();
         this.syncAccumulator = 0;
         this.syncInterval = 2;
         this.nextProjectileId = -1;
+        this.entitiesToRemove.clear();
+
         this.goToGameState(common.GameStateId.WAITING_PLAYERS);
     }
 
@@ -536,21 +663,29 @@ class Game {
                 );
                 this.addEntity(player.getShip());
             }, this);
-
-            this.goToGameState(common.GameStateId.WAITING_READY);
         }
+
+        this.goToGameState(common.GameStateId.WAITING_READY);
     }
 
     onWaitingPlayersReady(dt) {
-        this.goToGameState(common.GameStateId.PLAYING);
+        if (this.teams.some(team => !team.ready())) {
+            this.spawnEntities();
+        } else {
+            this.goToGameState(common.GameStateId.PLAYING);
+        }
     }
 
     onPlaying(dt) {
+
         // updating entities
         this.onUpdateEntities(dt);
 
         // checking collisions
         this.onCheckCollisions(dt);
+
+        // cleanup
+        this.onPostPlayingUpdate();
     }
 
     onDone(dt) {
@@ -558,6 +693,7 @@ class Game {
     }
 
     onUpdateEntities(dt) {
+
         // update sync timer
         this.updateSyncAccumulator(dt);
         // whenever a position sync is required, every ~ 2sec
@@ -565,8 +701,6 @@ class Game {
         if (syncRequired) {
             this.resetSyncAccumulator();
         }
-
-        let toRemove = [];
 
         // updating
         for (var i = 0; i < this.entities.length; i++) {
@@ -628,35 +762,57 @@ class Game {
                         position.x <= GameConstants.MAP_MIN_X ||
                         position.y >= GameConstants.MAP_MAX_Y ||
                         position.y <= GameConstants.MAP_MIN_Y) {
-                        toRemove.push(entity);
+                        this.entitiesToRemove.push(entity);
                     }
                     break;
             }
         }
-
-        toRemove.forEach(entity => this.removeEntity(entity), this);
     }
 
     onCheckCollisions(dt) {
-        let toRemove = [];
-
         for (var i = 0; i < this.entities.length; i++) {
             for (var j = i; j < this.entities.length; j++) {
                 let a = this.entities[i];
                 let b = this.entities[j];
-                // ignore same team
-                if (a.getTeam() === b.getTeam())
+
+                if (a.getId() == b.getId())
                     continue;
 
-                // ignore entities that are going to be destroyed
-                if (toRemove.indexOf(a) != -1 || toRemove.indexOf(b) != -1)
+                if (a.getTeam() == b.getTeam())
                     continue;
 
+                if (this.entitiesToRemove.indexOf(a) != -1 ||
+                    this.entitiesToRemove.indexOf(b) != -1)
+                    continue;
 
+                if (a.collideWith(b)) {
+                    if ((a.getType() == common.EntityTypeId.SHIP &&
+                            b.getType() == common.EntityTypeId.PROJECTILE) ||
+                        (b.getType() == common.EntityTypeId.SHIP &&
+                            a.getType() == common.EntityTypeId.PROJECTILE)) {
+                        if (a.getType() == common.EntityTypeId.SHIP) {
+                            this.onCollision(a, b);
+                        } else {
+                            this.onCollision(b, a);
+                        }
+                    } else if (a.getType() == common.EntityTypeId.PROJECTILE && b.getType() && common.EntityTypeId.PROJECTILE) {
+                        this.entitiesToRemove.push(a);
+                        this.entitiesToRemove.push(b);
+                        this.broadcast(new common.EntityHit(a.getId(), a.getPosition(), 0));
+                    }
+                }
             }
         }
+    }
 
-        toRemove.forEach(entity => this.removeEntity(entity), this);
+    onCollision(ship, projectile) {
+        this.entitiesToRemove.push(projectile);
+        this.broadcast(new common.EntityHit(ship.getId(), projectile.getPosition(), 0));
+    }
+
+    onPostPlayingUpdate() {
+        this.entitiesToRemove.forEach(entity => this.removeEntity(entity), this);
+        this.entitiesToRemove.clear();
     }
 }
 

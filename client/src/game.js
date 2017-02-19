@@ -2,12 +2,14 @@ var GameLayer = NetLayer.extend({
     ctor: function (account) {
         this._super();
 
+        this.localShip = null;
         this.account = account;
         this.players = [];
         this.entities = [];
         this.mousePosition = new Point(0, 0);
         this.lookAccumulator = 0;
-        this.lookInterval = 1.0 / 10;
+        this.lookInterval = 1.0 / 8;
+        this.sentAngle = 0;
 
         this.addChild(Background.create(Resources.assets.background.black, cc.winSize), 0);
 
@@ -19,13 +21,16 @@ var GameLayer = NetLayer.extend({
         this.entities.forEach(entity => entity.update(dt));
         if (this.localShip != null) {
             let angle = this.localShip.getPosition().angleToPoint(this.mousePosition);
-            // local update
-            this.localShip.setRotation(angle);
-            // remote update
-            this.lookAccumulator -= dt;
-            if (this.lookAccumulator <= 0) {
-                this.lookAccumulator = this.lookInterval;
-                GravityEvent.fire(NetworkEventType.OUTGOING_MESSAGE, new RotationRequest(angle));
+            if (angle != this.localShip.getRotation() || this.sentAngle != angle) {
+                // local update
+                this.localShip.setRotation(angle);
+                // remote update
+                this.lookAccumulator -= dt;
+                if (this.lookAccumulator <= 0) {
+                    this.lookAccumulator = this.lookInterval;
+                    this.sentAngle = angle;
+                    GravityEvent.fire(NetworkEventType.OUTGOING_MESSAGE, new RotationRequest(angle));
+                }
             }
         }
     },
@@ -69,6 +74,9 @@ var GameLayer = NetLayer.extend({
 
             case MessageId.SC_ENTITY_SPAWN:
                 cc.log("entity spawn");
+                if (this.getEntity(message.entityInfo.id) != undefined) {
+                    return;
+                }
                 switch (message.entityType) {
                     case EntityTypeId.SHIP:
                         let ship = new Ship(message.entityInfo);
@@ -76,11 +84,12 @@ var GameLayer = NetLayer.extend({
                         if (isLocal) {
                             cc.log("local ship loaded");
                             this.initLocalShip(ship);
+                            GravityEvent.fire(NetworkEventType.OUTGOING_MESSAGE, new PlayerReady());
+
                         }
                         this.addEntity(ship);
                         break;
                     case EntityTypeId.PROJECTILE:
-                        cc.log(message.entityInfo);
                         this.addEntity(new Projectile(message.entityInfo));
                         break;
                 }
@@ -119,7 +128,12 @@ var GameLayer = NetLayer.extend({
 
             case MessageId.SC_ENTITY_DESTROY:
                 cc.log("entity destroy");
-                this.removeEntity(this.getEntity(message.entityId));
+                this.removeEntity(message.entityId);
+                break;
+
+            case MessageId.SC_ENTITY_HIT:
+                cc.log("entity hit " + message.entityId);
+                this.addChild(EntityHitSprite.create(message));
                 break;
         }
     },
@@ -153,7 +167,7 @@ var GameLayer = NetLayer.extend({
                         break;
                 }
             },
-            onMouseScroll: function (event) { },
+            onMouseScroll: function (event) {},
             onMouseMove: function (event) {
                 let x = event.getLocationX();
                 let y = event.getLocationY();

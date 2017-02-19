@@ -1,3 +1,5 @@
+"use strict";
+
 const ShipColor = {
     COLOR_TEAM_ZERO: 0,
     COLOR_TEAM_ONE: 3
@@ -11,6 +13,7 @@ class AbstractSpriteEntity extends AbstractEntity {
         this.isLocal = false;
         this.sprite = new cc.Sprite(image);
         this.sprite.setAnchorPoint(new cc.Point(0.5, 0.5));
+        this.sprite.setScale(0.5);
 
         this.setPosition(info.position);
         this.setRotation(info.rotation);
