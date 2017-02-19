@@ -362,10 +362,6 @@ class Ship extends AbstractNetworkEntity {
     update(dt) {
         super.update(dt);
         this.lastShootAccumulator -= dt;
-        let position = this.getPosition();
-        if (this.position.x >= GameConstants.MAP_MAX_X || this.position.x <= GameConstants.MIN_MAP_X) {
-
-        }
     }
 }
 
